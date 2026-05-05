@@ -1,90 +1,51 @@
 # shabviz-style
 
-Personal matplotlib/seaborn style spec for scientific figures.
-Built around viridis-family colormaps and the Inter font by default —
-both are configurable, and the architecture is designed to grow as you
-add presets.
+Personal style spec for scientific figures in matplotlib/seaborn (Python)
+and ggplot2 (R). Built around viridis-family colormaps and the Inter font.
+The two implementations share design decisions so figures look consistent
+across languages.
 
-## Install
-
-In each environment where you want it available:
+## Python
 
 ```bash
-pip install -e /path/to/shabviz-style          # editable: edits propagate
-# or:
-uv pip install -e /path/to/shabviz-style
+pip install "git+https://github.com/shabtastic/shabviz-style.git#subdirectory=python"
 ```
-
-To install from a git repo (works across machines, no path required):
-
-```bash
-pip install git+https://github.com/<you>/shabviz-style.git
-```
-
-## Use
 
 ```python
-import shabviz_style as pf
-pf.setup()                                   # default: viridis + Inter
+import shabviz_style as sv
+sv.setup()                                   # default: viridis + Inter
 
-# Continuous: viridis is now the default cmap
-plt.imshow(arr)
-
-# Categorical (matplotlib will cycle through 6 viridis-derived colors,
-# starting with the binary pair)
-sns.lineplot(data=df, x='t', y='y', hue='condition')
-
-# When you know N up front and want the optimal palette:
-colors = pf.palette(3)                       # unordered categorical
-colors = pf.palette(3, ordered=True)         # ordinal: low/medium/high
-colors = pf.binary_palette()                 # the high-contrast pair
-colors = pf.palette(4, cmap='mako')          # use a viridis cousin
-
-# Pass to seaborn:
-sns.barplot(..., palette=pf.palette(3))
+# Palette helpers
+sv.palette(3)                                # unordered categorical
+sv.palette(3, ordered=True)                  # ordinal: low / mid / high
+sv.binary_palette()                          # high-contrast pair
+sv.palette(4, cmap='mako')                   # cousin colormap
 ```
 
-## Customizing
+See [`python/README.md`](python/README.md) for full Python docs (if separated).
 
-The most common tweaks are first-class arguments to `setup()`:
+## R
 
-```python
-pf.setup(cmap='mako')                          # different base palette
-pf.setup(font='IBM Plex Sans')                 # different body font
-pf.setup(cmap='rocket', font='Source Sans 3')  # both
-pf.setup(rc_overrides={                        # arbitrary rcParam tweaks
-    'figure.figsize': (8, 5),
-    'mathtext.fontset': 'cm',                  # LaTeX-classic math
-    'axes.grid': True,
-})
+```r
+remotes::install_github("shabtastic/shabviz-style", subdir = "r")
 ```
 
-Auto-installable fonts: **Inter**, **Source Sans 3**, **IBM Plex Sans**.
-Any other font name works if it's installed system-wide.
+```r
+library(shabvizstyle)
+setup()
 
-To register a new font for auto-install, append to `_FONT_SOURCES` at
-the top of `shabviz_style.py`:
-
-```python
-_FONT_SOURCES['MyFont'] = [
-    'https://primary.example.com/MyFont.ttf',
-    'https://fallback.example.com/MyFont.ttf',
-]
+palette_sv(3)
+palette_sv(3, ordered = TRUE)
+binary_palette()
+palette_sv(4, cmap = "mako")
 ```
 
-## Cousin colormaps
+See [`r/README.md`](r/README.md) for full R docs.
 
-Sequential: `viridis`, `mako`, `rocket`, `crest`, `flare`, `cividis`
-Diverging: `vlag`, `icefire`, `coolwarm`
+## Defaults
 
-The seaborn-provided cousins (mako, rocket, crest, flare, vlag, icefire)
-register automatically when this module is imported.
-
-For darker cousins like mako or rocket where 0.05 is near-black, the
-module automatically lifts the dark end of the binary range to 0.20.
-Override per call:
-
-```python
-pf.binary_palette(cmap='mako', positions=(0.20, 0.92))
-pf.palette(4, cmap='rocket', lo=0.25, hi=0.95)
-```
+Both versions use:
+- **Colormap:** viridis (with mako, rocket, crest, flare, cividis as alternates)
+- **Font:** Inter (with system sans-serif fallback)
+- **Binary pair:** viridis(0.05) and viridis(0.92) — `#471365` and `#cae11f`
+- **Math:** stixsans (Python only; R uses ggplot2's expression handling)

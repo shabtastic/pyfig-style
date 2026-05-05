@@ -1,0 +1,23 @@
+Package: shabvizstyle
+Type: Package
+Title: Personal ggplot2 Style Spec for Scientific Figures
+Version: 0.1.0
+Authors@R: person("Shabnam", "Hakimi", role = c("aut", "cre"),
+                  email = "shabtastic@users.noreply.github.com")
+Description: A ggplot2 theme and palette helpers built around viridis-family
+    colormaps and the Inter font. Mirrors the Python shabviz-style package so
+    figures share visual identity across languages.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Depends: R (>= 4.0)
+Imports:
+    ggplot2 (>= 3.4.0),
+    scales,
+    viridisLite,
+    grDevices,
+    systemfonts
+Suggests:
+    ragg,
+    showtext,
+    sysfonts
+RoxygenNote: 7.3.0
