@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import matplotlib as mpl
 from matplotlib.patches import Rectangle
 
-import pyfig_style as pf
+import shabviz_style as pf
 
 pf.setup()
 

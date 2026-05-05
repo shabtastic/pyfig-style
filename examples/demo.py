@@ -4,7 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-import pyfig_style as pf
+import shabviz_style as pf
 
 pf.setup(verbose=True)
 

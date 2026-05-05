@@ -1,5 +1,5 @@
 [project]
-name = "pyfig-style"
+name = "shabviz-style"
 version = "0.1.0"
 description = "Personal matplotlib/seaborn style spec for scientific figures."
 readme = "README.md"
@@ -17,4 +17,4 @@ requires = ["setuptools>=61", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-py-modules = ["pyfig_style"]
+py-modules = ["shabviz_style"]

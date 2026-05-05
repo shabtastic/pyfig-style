@@ -1,4 +1,4 @@
-# pyfig-style
+# shabviz-style
 
 Personal matplotlib/seaborn style spec for scientific figures.
 Built around viridis-family colormaps and the Inter font by default —
@@ -10,21 +10,21 @@ add presets.
 In each environment where you want it available:
 
 ```bash
-pip install -e /path/to/pyfig-style          # editable: edits propagate
+pip install -e /path/to/shabviz-style          # editable: edits propagate
 # or:
-uv pip install -e /path/to/pyfig-style
+uv pip install -e /path/to/shabviz-style
 ```
 
 To install from a git repo (works across machines, no path required):
 
 ```bash
-pip install git+https://github.com/<you>/pyfig-style.git
+pip install git+https://github.com/<you>/shabviz-style.git
 ```
 
 ## Use
 
 ```python
-import pyfig_style as pf
+import shabviz_style as pf
 pf.setup()                                   # default: viridis + Inter
 
 # Continuous: viridis is now the default cmap
@@ -63,7 +63,7 @@ Auto-installable fonts: **Inter**, **Source Sans 3**, **IBM Plex Sans**.
 Any other font name works if it's installed system-wide.
 
 To register a new font for auto-install, append to `_FONT_SOURCES` at
-the top of `pyfig_style.py`:
+the top of `shabviz_style.py`:
 
 ```python
 _FONT_SOURCES['MyFont'] = [

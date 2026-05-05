@@ -1,5 +1,5 @@
 """
-pyfig_style — a matplotlib/seaborn style spec for scientific figures.
+shabviz_style — a matplotlib/seaborn style spec for scientific figures.
 
 Built around viridis-family colormaps and the Inter font by default, but
 both are configurable, and the architecture is designed to grow as you
@@ -7,7 +7,7 @@ add presets.
 
 Quick start
 -----------
-    import pyfig_style as pf
+    import shabviz_style as pf
     pf.setup()                                  # default: viridis + Inter
     pf.setup(cmap='mako', font='IBM Plex Sans') # different palette and font
     pf.setup(rc_overrides={                     # one-off rcParam tweaks
@@ -129,7 +129,7 @@ def install_font(name: str = 'Inter', force: bool = False) -> bool:
     if name not in _FONT_SOURCES:
         return name in available
 
-    cache = Path(mpl.get_cachedir()) / 'pyfig_style_fonts'
+    cache = Path(mpl.get_cachedir()) / 'shabviz_style_fonts'
     cache.mkdir(exist_ok=True)
     target = cache / f'{name.replace(" ", "_")}.ttf'
 
@@ -143,13 +143,13 @@ def install_font(name: str = 'Inter', force: bool = False) -> bool:
             except Exception as e:
                 last_err = e
         if last_err is not None:
-            print(f'[pyfig_style] Could not download {name}: {last_err}')
+            print(f'[shabviz_style] Could not download {name}: {last_err}')
             return False
 
     try:
         font_manager.fontManager.addfont(str(target))
     except Exception as e:
-        print(f'[pyfig_style] Could not register {name}: {e}')
+        print(f'[shabviz_style] Could not register {name}: {e}')
         return False
 
     return name in {f.name for f in font_manager.fontManager.ttflist}
@@ -386,8 +386,8 @@ def setup(cmap: str = 'viridis', font: str = 'Inter',
         if verbose:
             msg = (f'{font} registered.' if ok
                    else f'{font} not available; using fallback sans-serif.')
-            print(f'[pyfig_style] {msg}')
+            print(f'[shabviz_style] {msg}')
 
     apply_style(cmap=cmap, font=font, rc_overrides=rc_overrides)
     if verbose:
-        print(f'[pyfig_style] Style applied (cmap={cmap}, font={font}).')
+        print(f'[shabviz_style] Style applied (cmap={cmap}, font={font}).')
