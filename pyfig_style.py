@@ -1,0 +1,393 @@
+"""
+pyfig_style — a matplotlib/seaborn style spec for scientific figures.
+
+Built around viridis-family colormaps and the Inter font by default, but
+both are configurable, and the architecture is designed to grow as you
+add presets.
+
+Quick start
+-----------
+    import pyfig_style as pf
+    pf.setup()                                  # default: viridis + Inter
+    pf.setup(cmap='mako', font='IBM Plex Sans') # different palette and font
+    pf.setup(rc_overrides={                     # one-off rcParam tweaks
+        'figure.figsize': (8, 5),
+        'axes.grid': True,
+    })
+
+    # Continuous: cmap is the default for image.cmap
+    plt.imshow(arr)
+
+    # Categorical: the cycle's first two slots are always the binary pair,
+    # so 2-group plots get max contrast without specifying a palette.
+    sns.lineplot(data=df, x='t', y='y', hue='condition')
+
+    # When you know N up front:
+    pf.palette(3)                               # unordered categorical
+    pf.palette(3, ordered=True)                 # ordinal: low/medium/high
+    pf.binary_palette()                         # the high-contrast pair
+    pf.palette(4, cmap='mako')                  # use a viridis cousin
+
+Cousin colormaps
+----------------
+    Sequential: viridis, mako, rocket, crest, flare, cividis
+    Diverging:  vlag, icefire, coolwarm
+
+The seaborn-provided cousins (mako, rocket, crest, flare, vlag, icefire)
+register automatically when this module is imported (if seaborn is
+installed). Without seaborn you still get the matplotlib-native maps:
+viridis, cividis, coolwarm, plus plasma/inferno/magma.
+
+Adding a new auto-installable font
+----------------------------------
+Append to ``_FONT_SOURCES``::
+
+    _FONT_SOURCES['MyFont'] = [
+        'https://primary.example.com/MyFont.ttf',
+        'https://fallback.example.com/MyFont.ttf',
+    ]
+
+Then ``pf.setup(font='MyFont')`` will install it on demand.
+
+Tuning the binary range for darker cousins
+------------------------------------------
+``mako`` and ``rocket`` have very dark low ends. The module lifts the
+default ``lo`` to 0.20 for those. Override per-call with ``lo=`` and
+``hi=`` on ``palette()`` / ``binary_palette()``.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+import urllib.request
+
+import numpy as np
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+from matplotlib import font_manager
+from cycler import cycler
+
+# Importing seaborn (if available) registers the viridis cousin colormaps
+# (mako, rocket, crest, flare, vlag, icefire) into matplotlib's colormap registry.
+try:
+    import seaborn as _sns  # noqa: F401
+    _HAS_SEABORN = True
+except ImportError:
+    _HAS_SEABORN = False
+
+
+__all__ = [
+    'setup', 'apply_style', 'install_font',
+    'palette', 'binary_palette',
+    'SEQUENTIAL_CMAPS', 'DIVERGING_CMAPS',
+]
+
+
+SEQUENTIAL_CMAPS = ['viridis', 'mako', 'rocket', 'crest', 'flare', 'cividis']
+DIVERGING_CMAPS = ['vlag', 'icefire', 'coolwarm']
+
+
+# ---------------------------------------------------------------------------
+# Font registry
+# ---------------------------------------------------------------------------
+# Each entry maps a font family name to a list of fallback URLs (tried in
+# order). Variable fonts are preferred — one file covers all weights.
+# Add new fonts here to make them auto-installable.
+
+_FONT_SOURCES = {
+    'Inter': [
+        'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/inter/Inter%5Bopsz%2Cwght%5D.ttf',
+        'https://github.com/google/fonts/raw/main/ofl/inter/Inter%5Bopsz%2Cwght%5D.ttf',
+        'https://raw.githubusercontent.com/google/fonts/main/ofl/inter/Inter%5Bopsz%2Cwght%5D.ttf',
+    ],
+    'Source Sans 3': [
+        'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/sourcesans3/SourceSans3%5Bwght%5D.ttf',
+        'https://github.com/google/fonts/raw/main/ofl/sourcesans3/SourceSans3%5Bwght%5D.ttf',
+        'https://raw.githubusercontent.com/google/fonts/main/ofl/sourcesans3/SourceSans3%5Bwght%5D.ttf',
+    ],
+    'IBM Plex Sans': [
+        'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/ibmplexsans/IBMPlexSans-Regular.ttf',
+        'https://github.com/google/fonts/raw/main/ofl/ibmplexsans/IBMPlexSans-Regular.ttf',
+        'https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexsans/IBMPlexSans-Regular.ttf',
+    ],
+}
+
+
+def install_font(name: str = 'Inter', force: bool = False) -> bool:
+    """Download a registered font into matplotlib's cache and register it.
+
+    Returns True if the font is available after this call, else False.
+    Safe to call repeatedly — it's a no-op if already registered.
+
+    For fonts not in ``_FONT_SOURCES``, returns whether the font is already
+    available system-wide (no download attempted).
+    """
+    available = {f.name for f in font_manager.fontManager.ttflist}
+    if name in available and not force:
+        return True
+
+    if name not in _FONT_SOURCES:
+        return name in available
+
+    cache = Path(mpl.get_cachedir()) / 'pyfig_style_fonts'
+    cache.mkdir(exist_ok=True)
+    target = cache / f'{name.replace(" ", "_")}.ttf'
+
+    if not target.exists() or force:
+        last_err = None
+        for url in _FONT_SOURCES[name]:
+            try:
+                urllib.request.urlretrieve(url, target)
+                last_err = None
+                break
+            except Exception as e:
+                last_err = e
+        if last_err is not None:
+            print(f'[pyfig_style] Could not download {name}: {last_err}')
+            return False
+
+    try:
+        font_manager.fontManager.addfont(str(target))
+    except Exception as e:
+        print(f'[pyfig_style] Could not register {name}: {e}')
+        return False
+
+    return name in {f.name for f in font_manager.fontManager.ttflist}
+
+
+# ---------------------------------------------------------------------------
+# Palette helpers
+# ---------------------------------------------------------------------------
+
+# Per-cmap default sample range. For darker cousins, lift the dark end so
+# the first cycle entry doesn't go nearly black.
+_DEFAULT_RANGE = {
+    'viridis':  (0.05, 0.92),
+    'mako':     (0.20, 0.92),
+    'rocket':   (0.20, 0.92),
+    'crest':    (0.10, 0.92),
+    'flare':    (0.10, 0.92),
+    'cividis':  (0.05, 0.95),
+}
+_FALLBACK_RANGE = (0.05, 0.92)
+
+
+def _resolve_range(cmap: str, lo, hi):
+    default_lo, default_hi = _DEFAULT_RANGE.get(cmap, _FALLBACK_RANGE)
+    return (default_lo if lo is None else lo,
+            default_hi if hi is None else hi)
+
+
+def palette(n: int, ordered: bool = False, cmap: str = 'viridis',
+            lo: float = None, hi: float = None):
+    """Return n perceptually distinct colors from a viridis-family colormap.
+
+    Parameters
+    ----------
+    n : int
+        Number of colors. n=1 returns the midpoint; n>=2 samples the colormap
+        linearly between [lo, hi]. For n=2, that's exactly the high-contrast
+        binary pair.
+    ordered : bool, default False
+        If True, return colors in colormap order (use for ordinal data:
+        low/medium/high). If False, reorder so the first two entries are the
+        colormap endpoints (max binary contrast) and the rest fill in.
+    cmap : str, default 'viridis'
+        Any sequential matplotlib/seaborn colormap.
+    lo, hi : float, optional
+        Sample range within the colormap. Defaults are tuned per-cmap (see
+        ``_DEFAULT_RANGE``) so ``lo=0.05`` for viridis but ``0.20`` for the
+        darker mako/rocket.
+
+    Returns
+    -------
+    list of RGBA tuples (length n)
+    """
+    if n < 1:
+        raise ValueError('n must be >= 1')
+
+    cm = mpl.colormaps[cmap]
+    lo, hi = _resolve_range(cmap, lo, hi)
+
+    if n == 1:
+        return [cm(0.5)]
+
+    positions = np.linspace(lo, hi, n)
+    colors = [cm(p) for p in positions]
+
+    if not ordered:
+        colors = _maxdist_reorder(colors)
+    return colors
+
+
+def binary_palette(cmap: str = 'viridis', positions=None):
+    """High-contrast binary pair from a viridis-family colormap.
+
+    With ``positions=None``, uses the cmap's default range from
+    ``_DEFAULT_RANGE``. Pass ``positions=(lo, hi)`` to override.
+    """
+    cm = mpl.colormaps[cmap]
+    if positions is None:
+        positions = _DEFAULT_RANGE.get(cmap, _FALLBACK_RANGE)
+    return [cm(positions[0]), cm(positions[1])]
+
+
+def _maxdist_reorder(items):
+    """Reorder so the result starts with both endpoints (max contrast for
+    binary use), then fills in by greedy max-min-distance."""
+    n = len(items)
+    if n <= 2:
+        return list(items)
+    out = [0, n - 1]
+    while len(out) < n:
+        candidates = [i for i in range(n) if i not in out]
+        i = max(candidates, key=lambda c: min(abs(c - o) for o in out))
+        out.append(i)
+    return [items[i] for i in out]
+
+
+# ---------------------------------------------------------------------------
+# rcParams
+# ---------------------------------------------------------------------------
+
+def _build_rcparams(cmap: str = 'viridis', font: str = 'Inter'):
+    cycle_colors = palette(6, ordered=False, cmap=cmap)
+
+    # Build sans-serif fallback list with the chosen font first
+    fallbacks = [font, 'Inter', 'Helvetica Neue', 'Helvetica', 'Arial', 'DejaVu Sans']
+    seen = set()
+    sans_list = [f for f in fallbacks if not (f in seen or seen.add(f))]
+
+    return {
+        # --- Font ---
+        'font.family':      'sans-serif',
+        'font.sans-serif':  sans_list,
+        'font.size':        11,
+        'font.weight':      'normal',
+        # 'stixsans' visually matches a sans-serif body. Switch to 'cm' for
+        # LaTeX-classic math, or 'stix' for a Times-like serif feel.
+        'mathtext.fontset': 'stixsans',
+
+        # --- Figure ---
+        'figure.figsize':     (6.5, 4.5),
+        'figure.dpi':         110,
+        'figure.facecolor':   'white',
+        'figure.titlesize':   14,
+        'figure.titleweight': 'medium',
+
+        # --- Save / export ---
+        'savefig.dpi':        300,
+        'savefig.bbox':       'tight',
+        'savefig.pad_inches': 0.05,
+        'savefig.facecolor':  'white',
+        'pdf.fonttype':       42,
+        'ps.fonttype':        42,
+        'svg.fonttype':       'none',
+
+        # --- Axes ---
+        'axes.titlesize':    13,
+        'axes.titleweight':  'medium',
+        'axes.titlepad':     10,
+        'axes.labelsize':    11,
+        'axes.labelpad':     6,
+        'axes.labelweight':  'normal',
+        'axes.spines.top':   False,
+        'axes.spines.right': False,
+        'axes.linewidth':    0.8,
+        'axes.edgecolor':    '#333333',
+        'axes.labelcolor':   '#333333',
+        'axes.facecolor':    'white',
+
+        # --- Ticks ---
+        'xtick.labelsize':   10,
+        'ytick.labelsize':   10,
+        'xtick.direction':   'out',
+        'ytick.direction':   'out',
+        'xtick.major.size':  4,
+        'ytick.major.size':  4,
+        'xtick.major.width': 0.8,
+        'ytick.major.width': 0.8,
+        'xtick.minor.size':  2,
+        'ytick.minor.size':  2,
+        'xtick.color':       '#333333',
+        'ytick.color':       '#333333',
+
+        # --- Grid ---
+        'axes.grid':      False,
+        'grid.linewidth': 0.5,
+        'grid.alpha':     0.3,
+        'grid.color':     '#cccccc',
+
+        # --- Lines & patches ---
+        'lines.linewidth':       1.8,
+        'lines.markersize':      6,
+        'lines.solid_capstyle':  'round',
+        'lines.solid_joinstyle': 'round',
+        'patch.edgecolor':       'none',
+        'patch.linewidth':       0.5,
+
+        # --- Legend ---
+        'legend.fontsize':       10,
+        'legend.title_fontsize': 10,
+        'legend.frameon':        False,
+        'legend.borderpad':      0.4,
+        'legend.handlelength':   1.5,
+        'legend.handletextpad':  0.6,
+        'legend.columnspacing':  1.4,
+
+        # --- Color ---
+        'image.cmap':      cmap,
+        'axes.prop_cycle': cycler('color', cycle_colors),
+    }
+
+
+def apply_style(cmap: str = 'viridis', font: str = 'Inter',
+                rc_overrides: dict = None):
+    """Apply rcParams without touching font installation.
+
+    Parameters
+    ----------
+    cmap, font : str
+        Base colormap and font family.
+    rc_overrides : dict, optional
+        Extra rcParams applied on top of the defaults.
+    """
+    rc = _build_rcparams(cmap=cmap, font=font)
+    if rc_overrides:
+        rc.update(rc_overrides)
+    plt.rcParams.update(rc)
+
+
+def setup(cmap: str = 'viridis', font: str = 'Inter',
+          auto_install: bool = True, rc_overrides: dict = None,
+          verbose: bool = False) -> None:
+    """Set up the figure style: register the font (optional) and apply rcParams.
+
+    Parameters
+    ----------
+    cmap : str, default 'viridis'
+        Sequential colormap to use as the basis for the default cycle and
+        for ``image.cmap``. Other good options: 'mako', 'rocket', 'crest',
+        'flare', 'cividis'.
+    font : str, default 'Inter'
+        Sans-serif body font. Auto-install supported for fonts in
+        ``_FONT_SOURCES`` ('Inter', 'Source Sans 3', 'IBM Plex Sans').
+        Other names will work if the font is already installed system-wide.
+    auto_install : bool, default True
+        Whether to attempt downloading and registering the font.
+    rc_overrides : dict, optional
+        Extra rcParams to apply on top of the defaults. Use this for
+        per-script tweaks like ``{'figure.figsize': (8, 5)}``.
+    verbose : bool, default False
+        Print status messages.
+    """
+    if auto_install:
+        ok = install_font(font)
+        if verbose:
+            msg = (f'{font} registered.' if ok
+                   else f'{font} not available; using fallback sans-serif.')
+            print(f'[pyfig_style] {msg}')
+
+    apply_style(cmap=cmap, font=font, rc_overrides=rc_overrides)
+    if verbose:
+        print(f'[pyfig_style] Style applied (cmap={cmap}, font={font}).')

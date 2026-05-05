@@ -1,0 +1,19 @@
+[project]
+name = "pyfig-style"
+version = "0.1.0"
+description = "Personal matplotlib/seaborn style spec for scientific figures."
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "matplotlib>=3.7",
+    "numpy",
+    "cycler",
+    "seaborn>=0.12",
+]
+
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["pyfig_style"]
